@@ -199,11 +199,13 @@ public class InMemoryCache<K, V> implements LookupCache<K, V> {
   }
 
   public boolean hasSubjects(Predicate<String> match) {
-    return store.keySet().stream()
-        .anyMatch(k -> {
+    return store.entrySet().stream()
+        .anyMatch(e -> {
+          K k = e.getKey();
+          V v = e.getValue();
           if (k instanceof SchemaKey) {
             SchemaKey key = (SchemaKey) k;
-            SchemaValue value = (SchemaValue) store.get(k);
+            SchemaValue value = (SchemaValue) v;
             if (value != null && !value.isDeleted()) {
               return match.test(key.getSubject());
             }
