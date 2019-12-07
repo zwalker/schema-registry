@@ -299,7 +299,7 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
 
     kafkaStore.masterLock().lock();
     try {
-      SchemaRegistryIdentity previousMaster = masterIdentity;
+      final SchemaRegistryIdentity previousMaster = masterIdentity;
       masterIdentity = newMaster;
 
       if (masterIdentity == null) {
