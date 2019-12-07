@@ -311,19 +311,19 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
         }
       }
 
-      if (masterIdentity != null && !masterIdentity.equals(previousMaster) && isMaster()) {
-        // The new master may not know the exact last offset in the Kafka log. So, mark the
-        // last offset invalid here
-        kafkaStore.markLastWrittenOffsetInvalid();
-        //ensure the new master catches up with the offsets before it gets nextid and assigns
-        // master
-        try {
-          kafkaStore.waitUntilKafkaReaderReachesLastOffset(initTimeout);
-        } catch (StoreException e) {
-          throw new SchemaRegistryStoreException("Exception getting latest offset ", e);
-        }
-        idGenerator.init();
+      //if (masterIdentity != null && !masterIdentity.equals(previousMaster) && isMaster()) {
+      // The new master may not know the exact last offset in the Kafka log. So, mark the
+      // last offset invalid here
+      kafkaStore.markLastWrittenOffsetInvalid();
+      //ensure the new master catches up with the offsets before it gets nextid and assigns
+      // master
+      try {
+        kafkaStore.waitUntilKafkaReaderReachesLastOffset(initTimeout);
+      } catch (StoreException e) {
+        throw new SchemaRegistryStoreException("Exception getting latest offset ", e);
       }
+      idGenerator.init();
+      //}
       masterNodeSensor.record(isMaster() ? 1.0 : 0.0);
     } finally {
       kafkaStore.masterLock().unlock();
