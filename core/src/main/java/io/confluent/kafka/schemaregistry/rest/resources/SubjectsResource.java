@@ -139,9 +139,6 @@ public class SubjectsResource {
         @PathParam("subject") String subject) {
     List<Integer> deletedVersions;
     try {
-      if (!schemaRegistry.hasSubjects(subject)) {
-        throw Errors.subjectNotFoundException();
-      }
       Map<String, String> headerProperties = requestHeaderBuilder.buildRequestHeaders(
           headers, schemaRegistry.config().whitelistHeaders());
       deletedVersions = schemaRegistry.deleteSubjectOrForward(headerProperties, subject);

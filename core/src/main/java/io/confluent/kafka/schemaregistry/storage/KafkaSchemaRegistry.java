@@ -521,16 +521,18 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
 
   public void deleteSchemaVersionOrForward(
       Map<String, String> headerProperties, String subject,
-      Schema schema) throws SchemaRegistryException {
+      VersionId versionId) throws SchemaRegistryException {
 
     kafkaStore.lockFor(subject).lock();
     try {
       if (isMaster()) {
+        Schema schema = validateAndGetSchema(subject, versionId, false);
         deleteSchemaVersion(subject, schema);
       } else {
         // forward registering request to the master
         if (masterIdentity != null) {
-          forwardDeleteSchemaVersionRequestToMaster(headerProperties, subject, schema.getVersion());
+          forwardDeleteSchemaVersionRequestToMaster(
+              headerProperties, subject, versionId.getVersionId());
         } else {
           throw new UnknownMasterException("Register schema request failed since master is "
                                            + "unknown");
@@ -581,6 +583,9 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
     kafkaStore.lockFor(subject).lock();
     try {
       if (isMaster()) {
+        if (!hasSubjects(subject)) {
+          throw Errors.subjectNotFoundException();
+        }
         return deleteSubject(subject);
       } else {
         // forward registering request to the master

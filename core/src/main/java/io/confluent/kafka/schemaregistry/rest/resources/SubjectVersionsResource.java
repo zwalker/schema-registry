@@ -270,28 +270,10 @@ public class SubjectVersionsResource {
     } catch (InvalidVersionException e) {
       throw Errors.invalidVersionException();
     }
-    Schema schema = null;
-    String errorMessage = null;
-    try {
-      schema = schemaRegistry.validateAndGetSchema(subject, versionId, false);
-    } catch (SchemaRegistryStoreException e) {
-      errorMessage =
-          "Error while retrieving schema for subject "
-          + subject
-          + " with version "
-          + version
-          + " from the schema registry";
-      log.debug(errorMessage, e);
-      throw Errors.storeException(errorMessage, e);
-    } catch (InvalidVersionException e) {
-      throw Errors.invalidVersionException();
-    } catch (SchemaRegistryException e) {
-      throw Errors.schemaRegistryException(errorMessage, e);
-    }
     try {
       Map<String, String> headerProperties = requestHeaderBuilder.buildRequestHeaders(
           headers, schemaRegistry.config().whitelistHeaders());
-      schemaRegistry.deleteSchemaVersionOrForward(headerProperties, subject, schema);
+      schemaRegistry.deleteSchemaVersionOrForward(headerProperties, subject, versionId);
     } catch (SchemaRegistryTimeoutException e) {
       throw Errors.operationTimeoutException("Delete Schema Version operation timed out", e);
     } catch (SchemaRegistryStoreException e) {
@@ -307,6 +289,6 @@ public class SubjectVersionsResource {
       throw Errors.schemaRegistryException("Error while deleting Schema Version", e);
     }
 
-    asyncResponse.resume(schema.getVersion());
+    asyncResponse.resume(versionId.getVersionId());
   }
 }
