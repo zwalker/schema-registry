@@ -781,7 +781,7 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
   }
 
   @Override
-  public Set<String> listSubjects() throws SchemaRegistryException {
+  public Set<String> listSubjects() throws SchemaRegistryStoreException {
     try {
       Iterator<SchemaRegistryKey> allKeys = kafkaStore.getAllKeys();
       return extractUniqueSubjects(allKeys);
@@ -830,12 +830,7 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
 
 
   public boolean hasSubjects(String subject) throws SchemaRegistryStoreException {
-    try {
-      return lookupCache.hasSubjects(subject);
-    } catch (StoreException e) {
-      throw new SchemaRegistryStoreException(
-          "Error from the backend Kafka store", e);
-    }
+    return listSubjects().contains(subject);
   }
 
   @Override
