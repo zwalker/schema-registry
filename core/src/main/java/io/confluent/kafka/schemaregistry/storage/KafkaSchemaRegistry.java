@@ -311,7 +311,6 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
         }
       }
 
-      //if (masterIdentity != null && !masterIdentity.equals(previousMaster) && isMaster()) {
       // The new master may not know the exact last offset in the Kafka log. So, mark the
       // last offset invalid here
       kafkaStore.markLastWrittenOffsetInvalid();
@@ -322,8 +321,9 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
       } catch (StoreException e) {
         throw new SchemaRegistryStoreException("Exception getting latest offset ", e);
       }
-      idGenerator.init();
-      //}
+      if (masterIdentity != null && !masterIdentity.equals(previousMaster) && isMaster()) {
+        idGenerator.init();
+      }
       masterNodeSensor.record(isMaster() ? 1.0 : 0.0);
     } finally {
       kafkaStore.masterLock().unlock();
