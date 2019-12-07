@@ -193,6 +193,18 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
     return idGenerator;
   }
 
+  protected LookupCache<SchemaRegistryKey, SchemaRegistryValue> getLookupCache() {
+    return lookupCache;
+  }
+
+  protected Serializer<SchemaRegistryKey, SchemaRegistryValue> getSerializer() {
+    return serializer;
+  }
+
+  protected IdGenerator getIdentityGenerator() {
+    return idGenerator;
+  }
+
   /**
    * A Schema Registry instance's identity is in part the port it listens on. Currently the port can
    * either be configured via the deprecated `port` configuration, or via the `listeners`
