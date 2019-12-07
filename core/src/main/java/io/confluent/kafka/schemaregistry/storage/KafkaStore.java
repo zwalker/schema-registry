@@ -43,6 +43,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Lock;
 
 import io.confluent.kafka.schemaregistry.exceptions.SchemaRegistryException;
 import io.confluent.kafka.schemaregistry.rest.SchemaRegistryConfig;
@@ -439,4 +440,22 @@ public class KafkaStore<K, V> implements Store<K, V> {
       throw new StoreException("Failed to write Noop record to kafka store.", e);
     }
   }
+
+
+  public long lastOffset(String subject) {
+    return lastWrittenOffset;
+  }
+
+  public void setLastOffset(String subject, long lastOffset) {
+    this.lastWrittenOffset = lastOffset;
+  }
+
+  public Lock masterLock() {
+    return null;
+  }
+
+  public Lock lockFor(String subject) {
+    return null;
+  }
+
 }
