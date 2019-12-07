@@ -71,7 +71,7 @@ public class SchemasResource {
     String errorMessage = "Error while retrieving schema with id " + id + " from the schema "
                           + "registry";
     try {
-      schema = schemaRegistry.get(id, fetchMaxId);
+      schema = schemaRegistry.get(id);
     } catch (SchemaRegistryStoreException e) {
       log.debug(errorMessage, e);
       throw Errors.storeException(errorMessage, e);
