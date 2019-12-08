@@ -260,6 +260,7 @@ public class RestService implements Configurable {
         try (InputStream es = connection.getErrorStream()) {
           errorMessage = jsonDeserializer.readValue(es, ErrorMessage.class);
         } catch (JsonProcessingException e) {
+          responseCode = HttpURLConnection.HTTP_INTERNAL_ERROR;
           errorMessage = new ErrorMessage(JSON_PARSE_ERROR_CODE, e.getMessage());
         }
         throw new RestClientException(errorMessage.getMessage(), responseCode,

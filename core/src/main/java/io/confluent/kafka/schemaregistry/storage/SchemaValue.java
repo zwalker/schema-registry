@@ -34,7 +34,7 @@ public class SchemaValue implements Comparable<SchemaValue>, SchemaRegistryValue
   @NotEmpty
   private String schema;
   @NotEmpty
-  private boolean deleted;
+  private volatile boolean deleted;
 
   public SchemaValue(@JsonProperty("subject") String subject,
                      @JsonProperty("version") Integer version,
