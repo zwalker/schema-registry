@@ -688,11 +688,14 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
     try {
       masterRestService.deleteSchemaVersion(headerProperties, subject, String.valueOf(version));
     } catch (IOException e) {
+      log.debug("Forwarding delete version caught IOException", e);
       throw new SchemaRegistryRequestForwardingException(
           String.format(
               "Unexpected error while forwarding deleteSchemaVersion schema version "
               + "request %s-%s to %s", subject, version, baseUrl), e);
     } catch (RestClientException e) {
+      log.debug("Forwarding delete version caught RestClientException with status {}",
+          e.getStatus(), e);
       throw new RestException(e.getMessage(), e.getStatus(), e.getErrorCode(), e);
     }
   }
@@ -707,11 +710,14 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
     try {
       return masterRestService.deleteSubject(requestProperties, subject);
     } catch (IOException e) {
+      log.debug("Forwarding delete subject caught IOException", e);
       throw new SchemaRegistryRequestForwardingException(
           String.format(
               "Unexpected error while forwarding delete subject "
               + "request %s to %s", subject, baseUrl), e);
     } catch (RestClientException e) {
+      log.debug("Forwarding delete subject caught RestClientException with status {}",
+          e.getStatus(), e);
       throw new RestException(e.getMessage(), e.getStatus(), e.getErrorCode(), e);
     }
   }
