@@ -19,9 +19,10 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentNavigableMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
 
@@ -36,16 +37,17 @@ import io.confluent.kafka.schemaregistry.storage.exceptions.StoreInitializationE
  */
 public class InMemoryCache<K, V> implements LookupCache<K, V> {
   // visible for subclasses
-  protected final ConcurrentNavigableMap<K, V> store;
+  protected final NavigableMap<K, V> store;
   private final Map<Integer, SchemaKey> guidToSchemaKey;
   private final Map<MD5, SchemaIdAndSubjects> schemaHashToGuid;
   private final Map<Integer, List<SchemaKey>> guidToDeletedSchemaKeys;
 
   public InMemoryCache() {
-    this(new ConcurrentSkipListMap<>());
+    //this(new ConcurrentSkipListMap<>());
+    this(Collections.<K, V>synchronizedNavigableMap(new TreeMap<K, V>()));
   }
 
-  public InMemoryCache(ConcurrentNavigableMap<K, V> store) {
+  public InMemoryCache(NavigableMap<K, V> store) {
     this.store = store;
     this.guidToSchemaKey = new ConcurrentHashMap<>();
     this.schemaHashToGuid = new ConcurrentHashMap<>();

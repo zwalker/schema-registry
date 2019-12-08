@@ -584,6 +584,8 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
     try {
       if (isMaster()) {
         if (!hasSubjects(subject)) {
+          log.warn("Identity {} could not find subject {} among subjects {} during deleteSubject",
+              myIdentity, subject, listSubjects());
           throw Errors.subjectNotFoundException();
         }
         return deleteSubject(subject);
@@ -750,8 +752,13 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
     Schema schema = this.get(subject, versionId.getVersionId(), returnDeletedSchema);
     if (schema == null) {
       if (!this.hasSubjects(subject)) {
+        log.warn("Identity {} could not find subject {} among subjects {} during deleteVersion",
+            myIdentity, subject, listSubjects());
         throw Errors.subjectNotFoundException();
       } else {
+        log.warn("Identity {} could not find version {} for subject {} during deleteVersion",
+            myIdentity,
+            versionId.getVersionId(), subject);
         throw Errors.versionNotFoundException();
       }
     }
@@ -813,7 +820,7 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
   }
 
   @Override
-  public Set<String> listSubjects() throws SchemaRegistryException {
+  public Set<String> listSubjects() throws SchemaRegistryStoreException {
     try {
       Iterator<SchemaRegistryKey> allKeys = kafkaStore.getAllKeys();
       return extractUniqueSubjects(allKeys);
@@ -861,12 +868,8 @@ public class KafkaSchemaRegistry implements SchemaRegistry, MasterAwareSchemaReg
   }
 
   public boolean hasSubjects(String subject) throws SchemaRegistryStoreException {
-    try {
-      return lookupCache.hasSubjects(subject);
-    } catch (StoreException e) {
-      throw new SchemaRegistryStoreException(
-          "Error from the backend Kafka store", e);
-    }
+    Set<String> subjects = listSubjects();
+    return subjects.contains(subject);
   }
 
   @Override
