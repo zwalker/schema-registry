@@ -83,6 +83,7 @@ public class ZookeeperMasterElector implements MasterElector {
       @Override
       public void run() {
         try {
+          log.error("SR REST - start ZK elector init");
           if (isEligibleForMasterElection) {
             electMaster();
           } else {

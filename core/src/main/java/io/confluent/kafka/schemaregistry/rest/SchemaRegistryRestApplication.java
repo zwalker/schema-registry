@@ -85,13 +85,16 @@ public class SchemaRegistryRestApplication extends Application<SchemaRegistryCon
   public void configureBaseApplication(
       final Configurable<?> config,
       final Map<String, String> metricTags) {
+    log.debug("SR REST - start configure base");
     super.configureBaseApplication(config, metricTags);
 
     schemaRegistry = initSchemaRegistry(getConfiguration());
+    log.debug("SR REST - done configure base");
   }
 
   @Override
   public void setupResources(Configurable<?> config, SchemaRegistryConfig schemaRegistryConfig) {
+    log.debug("SR REST - start setup resources");
     schemaRegistryResourceExtensions =
         schemaRegistryConfig.getConfiguredInstances(
             schemaRegistryConfig.definedResourceExtensionConfigName(),
@@ -117,6 +120,7 @@ public class SchemaRegistryRestApplication extends Application<SchemaRegistryCon
         System.exit(1);
       }
     }
+    log.debug("SR REST - done setup resources");
   }
 
   @Override

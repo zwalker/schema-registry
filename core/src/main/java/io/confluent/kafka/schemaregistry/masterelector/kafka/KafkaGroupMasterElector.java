@@ -190,6 +190,7 @@ public class KafkaGroupMasterElector implements MasterElector, SchemaRegistryReb
       @Override
       public void run() {
         try {
+          log.error("SR REST - start Kafka elector init");
           while (!stopped.get()) {
             coordinator.poll(Integer.MAX_VALUE);
           }
