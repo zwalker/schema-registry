@@ -20,9 +20,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
 
@@ -70,7 +70,7 @@ public class InMemoryCache<K, V> implements LookupCache<K, V> {
 
   @Override
   public Iterator<V> getAll(K key1, K key2) {
-    ConcurrentNavigableMap<K, V> subMap = (key1 == null && key2 == null)
+    SortedMap<K, V> subMap = (key1 == null && key2 == null)
                                           ? store
                                           : store.subMap(key1, key2);
     return subMap.values().iterator();
