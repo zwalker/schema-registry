@@ -41,8 +41,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -74,7 +74,7 @@ public class KafkaGroupMasterElector implements MasterElector, SchemaRegistryReb
   private final KafkaSchemaRegistry schemaRegistry;
 
   private AtomicBoolean stopped = new AtomicBoolean(false);
-  private ExecutorService executor;
+  private ScheduledExecutorService executor;
   private CountDownLatch joinedLatch = new CountDownLatch(1);
 
   public KafkaGroupMasterElector(SchemaRegistryConfig config,
@@ -185,8 +185,8 @@ public class KafkaGroupMasterElector implements MasterElector, SchemaRegistryReb
   public void init() throws SchemaRegistryTimeoutException, SchemaRegistryStoreException {
     log.debug("Initializing schema registry group member");
 
-    executor = Executors.newSingleThreadExecutor();
-    executor.submit(new Runnable() {
+    executor = Executors.newSingleThreadScheduledExecutor();
+    executor.schedule(new Runnable() {
       @Override
       public void run() {
         try {
@@ -197,7 +197,7 @@ public class KafkaGroupMasterElector implements MasterElector, SchemaRegistryReb
           log.error("Unexpected exception in schema registry group processing thread", t);
         }
       }
-    });
+    }, 10, TimeUnit.SECONDS);
 
     try {
       if (!joinedLatch.await(initTimeout, TimeUnit.MILLISECONDS)) {

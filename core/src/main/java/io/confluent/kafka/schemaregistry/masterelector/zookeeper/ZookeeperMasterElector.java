@@ -25,6 +25,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import io.confluent.kafka.schemaregistry.exceptions.SchemaRegistryException;
 import io.confluent.kafka.schemaregistry.exceptions.SchemaRegistryInitializationException;
@@ -48,6 +51,7 @@ public class ZookeeperMasterElector implements MasterElector {
   private final SchemaRegistryIdentity myIdentity;
   private final String myIdentityString;
   private final MasterAwareSchemaRegistry schemaRegistry;
+  private ScheduledExecutorService executor;
 
 
   public ZookeeperMasterElector(SchemaRegistryConfig config,
@@ -74,11 +78,21 @@ public class ZookeeperMasterElector implements MasterElector {
 
   public void init() throws SchemaRegistryTimeoutException, SchemaRegistryStoreException,
       SchemaRegistryInitializationException, IdGenerationException {
-    if (isEligibleForMasterElection) {
-      electMaster();
-    } else {
-      readCurrentMaster();
-    }
+    executor = Executors.newSingleThreadScheduledExecutor();
+    executor.schedule(new Runnable() {
+      @Override
+      public void run() {
+        try {
+          if (isEligibleForMasterElection) {
+            electMaster();
+          } else {
+            readCurrentMaster();
+          }
+        } catch (Throwable t) {
+          log.error("Unexpected exception in schema registry group processing thread", t);
+        }
+      }
+    }, 10, TimeUnit.SECONDS);
   }
 
   public void close() {
