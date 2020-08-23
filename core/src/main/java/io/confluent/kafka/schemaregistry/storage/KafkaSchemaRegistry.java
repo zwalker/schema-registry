@@ -226,7 +226,7 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
   }
 
   protected LookupCache<SchemaRegistryKey, SchemaRegistryValue> lookupCache() {
-    return new InMemoryCache<SchemaRegistryKey, SchemaRegistryValue>(serializer);
+    return new PersistentCache<>(serializer, "/tmp/bdb-" + System.currentTimeMillis(), 0);
   }
 
   public LookupCache<SchemaRegistryKey, SchemaRegistryValue> getLookupCache() {
