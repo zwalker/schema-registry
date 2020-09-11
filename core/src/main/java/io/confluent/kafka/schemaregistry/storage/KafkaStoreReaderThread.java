@@ -105,6 +105,7 @@ public class KafkaStoreReaderThread<K, V> extends ShutdownableThread {
       try {
         String checkpointDir =
             config.getString(SchemaRegistryConfig.KAFKASTORE_CHECKPOINT_DIR_CONFIG);
+        checkpointDir = "/tmp/checkpt-" + System.currentTimeMillis();
         int checkpointVersion =
             config.getInt(SchemaRegistryConfig.KAFKASTORE_CHECKPOINT_VERSION_CONFIG);
         checkpointFile = new OffsetCheckpoint(checkpointDir, checkpointVersion, topic);

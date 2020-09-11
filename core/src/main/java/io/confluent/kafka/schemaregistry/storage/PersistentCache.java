@@ -5,6 +5,7 @@
 package io.confluent.kafka.schemaregistry.storage;
 
 import com.sleepycat.je.Cursor;
+import com.sleepycat.je.CursorConfig;
 import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseConfig;
 import com.sleepycat.je.DatabaseEntry;
@@ -20,6 +21,7 @@ import com.sleepycat.je.SecondaryCursor;
 import com.sleepycat.je.SecondaryDatabase;
 import com.sleepycat.je.SecondaryKeyCreator;
 import com.sleepycat.je.SecondaryMultiKeyCreator;
+import com.sleepycat.je.utilint.Pair;
 
 import java.io.File;
 import java.io.Serializable;
@@ -50,12 +52,14 @@ import io.confluent.kafka.schemaregistry.storage.serialization.Serializer;
 /**
  * Persistent cache
  */
-public class PersistentCache<K extends Comparable<K>, V> implements LookupCache<K, V> {
+public class PersistentCache<K extends Comparable<K>, V>
+    implements LookupCache<K, V> {
   private static final Logger log = LoggerFactory.getLogger(PersistentCache.class);
 
   private final Serializer<K, V> serializer;
   private final String dataDir;
   private final int version;
+  private final int cachePercentage;
   private Environment env;
   // visible for subclasses
   protected Database store;
@@ -64,10 +68,12 @@ public class PersistentCache<K extends Comparable<K>, V> implements LookupCache<
   private SecondaryDatabase referencedBy;
   private boolean isOpen;
 
-  public PersistentCache(Serializer<K, V> serializer, String dataDir, int version) {
+  public PersistentCache(
+      Serializer<K, V> serializer, String dataDir, int version, int cachePercentage) {
     this.serializer = serializer;
     this.dataDir = dataDir;
     this.version = version;
+    this.cachePercentage = cachePercentage;
   }
 
   @Override
@@ -81,12 +87,15 @@ public class PersistentCache<K extends Comparable<K>, V> implements LookupCache<
       // Remove two versions ago
       File oldDir = new File(dataDir, "schemas-" + (version - 2));
       if (oldDir.exists()) {
-        deleteDirectory(oldDir);
+        if (!deleteDirectory(oldDir)) {
+          log.warn("Could not delete old dir: {}", oldDir);
+        }
       }
       File dir = new File(dataDir, "schemas-" + version);
-      if (!dir.exists() && !dir.mkdirs()) {
+      if ((!dir.exists() && !dir.mkdirs()) || !dir.isDirectory() || !dir.canWrite()) {
         throw new StoreInitializationException(
-            String.format("directory [%s] doesn't exist and couldn't be created", dir.getPath()));
+            String.format(
+                "Cannot access or write to directory [%s]", dir.getPath()));
       }
       open(dir, false);
     } catch (Exception e) {
@@ -141,7 +150,7 @@ public class PersistentCache<K extends Comparable<K>, V> implements LookupCache<
       byte[] key1Bytes = serializer.serializeKey(key1);
       DatabaseEntry dbKey = new DatabaseEntry(key1Bytes);
       DatabaseEntry dbValue = new DatabaseEntry();
-      Cursor cursor = store.openCursor(null, null);
+      Cursor cursor = store.openCursor(null, CursorConfig.READ_UNCOMMITTED); // avoid read locks
 
       return new CloseableIterator<V>() {
         private OperationStatus status;
@@ -217,8 +226,18 @@ public class PersistentCache<K extends Comparable<K>, V> implements LookupCache<
   }
 
   @Override
-  public void putAll(Map<K, V> entries) {
-    throw new UnsupportedOperationException();
+  public void putAll(Map<K, V> entries) throws StoreException {
+    try {
+      for (Map.Entry<? extends K, ? extends V> entry : entries.entrySet()) {
+        byte[] keyBytes = serializer.serializeKey(entry.getKey());
+        DatabaseEntry dbKey = new DatabaseEntry(keyBytes);
+        byte[] valueBytes = serializer.serializeValue(entry.getValue());
+        DatabaseEntry dbValue = new DatabaseEntry(valueBytes);
+        store.put(null, dbKey, dbValue);
+      }
+    } catch (Exception e) {
+      throw new StoreException("Put failed", e);
+    }
   }
 
   @Override
@@ -239,7 +258,7 @@ public class PersistentCache<K extends Comparable<K>, V> implements LookupCache<
     try {
       DatabaseEntry dbKey = new DatabaseEntry();
       DatabaseEntry dbValue = new DatabaseEntry();
-      Cursor cursor = store.openCursor(null, null);
+      Cursor cursor = store.openCursor(null, CursorConfig.READ_UNCOMMITTED); // avoid read locks
 
       return new CloseableIterator<K>() {
         private OperationStatus status;
@@ -303,7 +322,7 @@ public class PersistentCache<K extends Comparable<K>, V> implements LookupCache<
   @Override
   public void flush() throws StoreException {
     try {
-      env.sync();
+      env.flushLog(true);
     } catch (Exception e) {
       throw new StoreException("Failed to flush", e);
     }
@@ -412,6 +431,28 @@ public class PersistentCache<K extends Comparable<K>, V> implements LookupCache<
     } catch (Exception e) {
       throw new StoreException(e);
     }
+  }
+
+  public int getMaxId(String tenant) {
+    try (SecondaryCursor cursor = guidToSubjectVersions.openCursor(null, null)) {
+      byte[] keyBytes = serializeGuid(tenant, Integer.MAX_VALUE);
+      DatabaseEntry idxKey = new DatabaseEntry(keyBytes);
+      DatabaseEntry dbKey = new DatabaseEntry();
+      DatabaseEntry dbValue = new DatabaseEntry();
+      OperationStatus status = cursor.getSearchKeyRange(idxKey, dbKey, dbValue, LockMode.DEFAULT);
+      if (status == OperationStatus.SUCCESS) {
+        status = cursor.getPrev(idxKey, dbKey, dbValue, LockMode.DEFAULT);
+      } else {
+        status = cursor.getLast(idxKey, dbKey, dbValue, LockMode.DEFAULT);
+      }
+      if (status == OperationStatus.SUCCESS) {
+        Pair<String, Integer> pair = deserializeGuid(idxKey.getData());
+        if (pair.first().equals(tenant)) {
+          return pair.second();
+        }
+      }
+    }
+    return -1;
   }
 
   @Override
@@ -562,6 +603,7 @@ public class PersistentCache<K extends Comparable<K>, V> implements LookupCache<
     EnvironmentConfig envConfig = new EnvironmentConfig();
     envConfig.setReadOnly(readOnly);
     envConfig.setAllowCreate(!readOnly);
+    envConfig.setCachePercent(cachePercentage);
     env = new Environment(envHome, envConfig);
 
     DatabaseConfig storeConfig = new DatabaseConfig();
@@ -735,6 +777,16 @@ public class PersistentCache<K extends Comparable<K>, V> implements LookupCache<
     buf.put(tenantBytes);
     buf.putInt(guid);
     return buf.array();
+  }
+
+  static Pair<String, Integer> deserializeGuid(byte[] data) {
+    ByteBuffer buf = ByteBuffer.wrap(data);
+    int len = buf.getInt();
+    byte[] tenantBytes = new byte[len];
+    buf.get(tenantBytes);
+    String tenant = new String(tenantBytes, StandardCharsets.UTF_8);
+    int id = buf.getInt();
+    return new Pair<>(tenant, id);
   }
 
   static byte[] serializeHash(String tenant, MD5 md5) {
