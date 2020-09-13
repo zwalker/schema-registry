@@ -228,17 +228,20 @@ public class PersistentCache<K extends Comparable<K>, V>
 
   @Override
   public void putAll(Map<K, V> entries) throws StoreException {
+    Transaction txn = env.beginTransaction(null, null);
     try {
       for (Map.Entry<? extends K, ? extends V> entry : entries.entrySet()) {
         byte[] keyBytes = serializer.serializeKey(entry.getKey());
         DatabaseEntry dbKey = new DatabaseEntry(keyBytes);
         byte[] valueBytes = serializer.serializeValue(entry.getValue());
         DatabaseEntry dbValue = new DatabaseEntry(valueBytes);
-        store.put(null, dbKey, dbValue);
+        store.put(txn, dbKey, dbValue);
       }
     } catch (Exception e) {
+      txn.abort();
       throw new StoreException("Put failed", e);
     }
+    txn.commit();
   }
 
   @Override
