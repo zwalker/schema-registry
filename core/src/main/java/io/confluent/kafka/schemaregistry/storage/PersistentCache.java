@@ -21,6 +21,7 @@ import com.sleepycat.je.SecondaryCursor;
 import com.sleepycat.je.SecondaryDatabase;
 import com.sleepycat.je.SecondaryKeyCreator;
 import com.sleepycat.je.SecondaryMultiKeyCreator;
+import com.sleepycat.je.Transaction;
 import com.sleepycat.je.utilint.Pair;
 
 import java.io.File;
@@ -565,7 +566,8 @@ public class PersistentCache<K extends Comparable<K>, V>
   }
 
   private void clearSubjects(String subject, Predicate<String> match) throws StoreException {
-    try (Cursor cursor = store.openCursor(null, null)) {
+    Transaction txn = env.beginTransaction(null, null);
+    try (Cursor cursor = store.openCursor(txn, null)) {
       byte[] keyBytes = serializer.serializeKey((K) new SchemaKey(subject, 1));
       DatabaseEntry dbKey = new DatabaseEntry(keyBytes);
       DatabaseEntry dbValue = new DatabaseEntry();
@@ -590,8 +592,10 @@ public class PersistentCache<K extends Comparable<K>, V>
         status = cursor.getNext(dbKey, dbValue, LockMode.DEFAULT);
       }
     } catch (Exception e) {
+      txn.abort();
       throw new StoreException(e);
     }
+    txn.commit();
   }
 
   protected Predicate<String> matchingSubjectPredicate(String subject) {
@@ -603,12 +607,14 @@ public class PersistentCache<K extends Comparable<K>, V>
     EnvironmentConfig envConfig = new EnvironmentConfig();
     envConfig.setReadOnly(readOnly);
     envConfig.setAllowCreate(!readOnly);
+    envConfig.setTransactional(true);
     envConfig.setCachePercent(cachePercentage);
     env = new Environment(envHome, envConfig);
 
     DatabaseConfig storeConfig = new DatabaseConfig();
     storeConfig.setReadOnly(readOnly);
     storeConfig.setAllowCreate(!readOnly);
+    storeConfig.setTransactional(true);
     storeConfig.setBtreeComparator(new KeyComparator<>(serializer));
     storeConfig.setKeyPrefixing(true);
     store = env.openDatabase(null, "sr", storeConfig);
@@ -617,6 +623,7 @@ public class PersistentCache<K extends Comparable<K>, V>
     SecondaryConfig guidToSubjectVersionsConfig = new SecondaryConfig();
     guidToSubjectVersionsConfig.setReadOnly(readOnly);
     guidToSubjectVersionsConfig.setAllowCreate(!readOnly);
+    guidToSubjectVersionsConfig.setTransactional(true);
     // Set up the secondary properties
     guidToSubjectVersionsConfig.setAllowPopulate(true); // Allow autopopulate
     guidToSubjectVersionsConfig.setKeyCreator(guidKeyCreator);
@@ -630,6 +637,7 @@ public class PersistentCache<K extends Comparable<K>, V>
     SecondaryConfig hashToGuidConfig = new SecondaryConfig();
     hashToGuidConfig.setReadOnly(readOnly);
     hashToGuidConfig.setAllowCreate(!readOnly);
+    hashToGuidConfig.setTransactional(true);
     // Set up the secondary properties
     hashToGuidConfig.setAllowPopulate(true); // Allow autopopulate
     hashToGuidConfig.setKeyCreator(hashKeyCreator);
@@ -643,6 +651,7 @@ public class PersistentCache<K extends Comparable<K>, V>
     SecondaryConfig referencedByConfig = new SecondaryConfig();
     referencedByConfig.setReadOnly(readOnly);
     referencedByConfig.setAllowCreate(!readOnly);
+    referencedByConfig.setTransactional(true);
     // Set up the secondary properties
     referencedByConfig.setAllowPopulate(true); // Allow autopopulate
     referencedByConfig.setMultiKeyCreator(referencedByKeyCreator);
