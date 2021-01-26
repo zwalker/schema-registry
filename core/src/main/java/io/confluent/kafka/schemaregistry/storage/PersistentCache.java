@@ -349,7 +349,7 @@ public class PersistentCache<K extends Comparable<K>, V>
 
   @Override
   public SchemaIdAndSubjects schemaIdAndSubjects(Schema schema) throws StoreException {
-    try (SecondaryCursor cursor = hashToGuid.openCursor(null, null)) {
+    try (SecondaryCursor cursor = hashToGuid.openCursor(null, CursorConfig.READ_COMMITTED)) {
       List<io.confluent.kafka.schemaregistry.client.rest.entities.SchemaReference> refs
           = schema.getReferences();
       MD5 md5 = MD5.ofString(schema.getSchema(), refs == null ? null : refs.stream()
@@ -391,7 +391,7 @@ public class PersistentCache<K extends Comparable<K>, V>
 
   @Override
   public Set<Integer> referencesSchema(SchemaKey schema) throws StoreException {
-    try (SecondaryCursor cursor = referencedBy.openCursor(null, null)) {
+    try (SecondaryCursor cursor = referencedBy.openCursor(null, CursorConfig.READ_COMMITTED)) {
       byte[] keyBytes = serializer.serializeKey((K) schema);
       DatabaseEntry idxKey = new DatabaseEntry(keyBytes);
       DatabaseEntry dbKey = new DatabaseEntry();
@@ -438,7 +438,8 @@ public class PersistentCache<K extends Comparable<K>, V>
   }
 
   public int getMaxId(String tenant) {
-    try (SecondaryCursor cursor = guidToSubjectVersions.openCursor(null, null)) {
+    try (SecondaryCursor cursor = guidToSubjectVersions.openCursor(
+        null, CursorConfig.READ_COMMITTED)) {
       byte[] keyBytes = serializeGuid(tenant, Integer.MAX_VALUE);
       DatabaseEntry idxKey = new DatabaseEntry(keyBytes);
       DatabaseEntry dbKey = new DatabaseEntry();
@@ -521,7 +522,7 @@ public class PersistentCache<K extends Comparable<K>, V>
   private Set<String> subjects(
           String subject, Predicate<String> match, boolean lookupDeletedSubjects)
       throws StoreException {
-    try (Cursor cursor = store.openCursor(null, null)) {
+    try (Cursor cursor = store.openCursor(null, CursorConfig.READ_COMMITTED)) {
       byte[] keyBytes = serializer.serializeKey((K) new SchemaKey(subject, 1));
       DatabaseEntry dbKey = new DatabaseEntry(keyBytes);
       DatabaseEntry dbValue = new DatabaseEntry();
@@ -570,7 +571,7 @@ public class PersistentCache<K extends Comparable<K>, V>
 
   private void clearSubjects(String subject, Predicate<String> match) throws StoreException {
     Transaction txn = env.beginTransaction(null, null);
-    try (Cursor cursor = store.openCursor(txn, null)) {
+    try (Cursor cursor = store.openCursor(txn, CursorConfig.READ_COMMITTED)) {
       byte[] keyBytes = serializer.serializeKey((K) new SchemaKey(subject, 1));
       DatabaseEntry dbKey = new DatabaseEntry(keyBytes);
       DatabaseEntry dbValue = new DatabaseEntry();
