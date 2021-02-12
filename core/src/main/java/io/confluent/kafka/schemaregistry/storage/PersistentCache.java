@@ -351,6 +351,7 @@ public class PersistentCache<K extends Comparable<K>, V>
         hashToGuid.close();
         guidToSubjectVersions.close();
         store.close();
+        env.close();
         isOpen = false;
       }
     } catch (Exception e) {
