@@ -28,6 +28,9 @@ import java.io.File;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -57,6 +60,8 @@ public class PersistentCache<K extends Comparable<K>, V>
     implements LookupCache<K, V> {
   private static final Logger log = LoggerFactory.getLogger(PersistentCache.class);
 
+  public static final String MOVEME_FILE_NAME = "moveme";
+
   private final Serializer<K, V> serializer;
   private final String dataDir;
   private final int version;
@@ -85,6 +90,12 @@ public class PersistentCache<K extends Comparable<K>, V>
   @Override
   public void init() throws StoreInitializationException {
     try {
+      File moveme = new File(dataDir, MOVEME_FILE_NAME);
+      if (moveme.exists()) {
+        Files.move(Paths.get(dataDir), Paths.get(dataDir + ".bak"),
+            StandardCopyOption.REPLACE_EXISTING);
+        Files.delete(Paths.get(dataDir + ".bak", MOVEME_FILE_NAME));
+      }
       // Remove two versions ago
       File oldDir = new File(dataDir, "schemas-" + (version - 2));
       if (oldDir.exists()) {
