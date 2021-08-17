@@ -18,6 +18,12 @@ package io.confluent.kafka.serializers.protobuf;
 import com.google.protobuf.Descriptors;
 import com.google.protobuf.DynamicMessage;
 import com.google.protobuf.Timestamp;
+import io.confluent.kafka.serializers.protobuf.test.OneofMessage.EnumV1;
+import io.confluent.kafka.serializers.protobuf.test.OneofMessage.EnumV2;
+import io.confluent.kafka.serializers.protobuf.test.OneofMessage.MessageV1;
+import io.confluent.kafka.serializers.protobuf.test.OneofMessage.MessageV2;
+import io.confluent.kafka.serializers.protobuf.test.OneofMessage.MessageV3;
+import io.confluent.kafka.serializers.protobuf.test.OneofMessage.MessageV4;
 import org.apache.kafka.common.errors.InvalidConfigurationException;
 import io.confluent.kafka.serializers.protobuf.test.TestMessageProtos.TestMessage2;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchema;
@@ -347,5 +353,33 @@ public class KafkaProtobufSerializerTest {
     DynamicMessage message = (DynamicMessage) protobufDeserializer.deserialize(topic, bytes);
     assertEquals(OPTIONAL_MESSAGE.getTestString(), getField(message, "test_string"));
     assertEquals(OPTIONAL_MESSAGE.hasTestOptionalString(), false);
+  }
+
+  @Test
+  public void testOneof() throws Exception {
+    byte[] bytes;
+
+    MessageV1 v1 = MessageV1.newBuilder()
+      .setF2("f2")
+      .setF3("f3")
+      .setF4("f4")
+      .setF5(EnumV1.TWO_V1)
+      .build();
+
+    MessageV2 v2 = MessageV2.parseFrom(v1.toByteArray());
+
+    System.out.println(v1);
+
+    MessageV2 v22 = v2.toBuilder().setF1("f1").setF5(EnumV2.ONE_V2).build();
+
+    byte[] v22bytes = v22.toByteArray();
+
+    MessageV3 v3 = MessageV3.parseFrom(v22bytes);
+
+    System.out.println(v3);
+
+    MessageV4 v4 = MessageV4.parseFrom(v22bytes);
+
+    System.out.println(v4);
   }
 }

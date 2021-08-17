@@ -2,20 +2,49 @@ syntax = "proto3";
 
 option java_package = "io.confluent.kafka.serializers.protobuf.test";
 
-message SubMessage1 {
-  bool flag = 1;
+enum EnumV1 {
+  ZERO_V1 = 0;
+  ONE_V1 = 1;
+  TWO_V1 = 2;
 }
-message SubMessage2 {
-  bool other_flag = 1;
+
+enum EnumV2 {
+  ZERO_V2 = 0;
+  ONE_V2 = 1;
 }
-message MasterMessageV1 {
+
+message MessageV1 {
   oneof payload {
-    SubMessage1 m1 = 1;
+    string f1 = 1;
+    string f2 = 2;
   }
+  string f3 = 3;
+  string f4 = 4;
+  EnumV1 f5 = 5;
 }
-message MasterMessageV2 {
+message MessageV2 {
   oneof payload {
-    SubMessage1 m1 = 1;
-    SubMessage2 m2 = 2;
+    string f1 = 1;
   }
+  string f3 = 3;
+  string f4 = 4;
+  EnumV2 f5 = 5;
+}
+message MessageV3 {
+  oneof payload {
+    string f1 = 1;
+    string f2 = 2;
+  }
+  string f3 = 3;
+  string f4 = 4;
+  EnumV1 f5 = 5;
+}
+message MessageV4 {
+  oneof payload {
+    string f1 = 1;
+    string f2 = 2;
+    string f3 = 3;
+    string f4 = 4;
+  }
+  EnumV1 f5 = 5;
 }
