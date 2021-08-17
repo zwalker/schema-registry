@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+option java_package = "io.confluent.kafka.serializers.protobuf.test";
+
+message SubMessage1 {
+  bool flag = 1;
+}
+message SubMessage2 {
+  bool other_flag = 1;
+}
+message MasterMessageV1 {
+  oneof payload {
+    SubMessage1 m1 = 1;
+  }
+}
+message MasterMessageV2 {
+  oneof payload {
+    SubMessage1 m1 = 1;
+    SubMessage2 m2 = 2;
+  }
+}
