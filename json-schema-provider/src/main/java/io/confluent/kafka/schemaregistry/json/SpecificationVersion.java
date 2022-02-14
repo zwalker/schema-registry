@@ -15,16 +15,53 @@
 
 package io.confluent.kafka.schemaregistry.json;
 
+import static java.lang.String.format;
+
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 
 public enum SpecificationVersion {
-  DRAFT_4,
-  DRAFT_6,
-  DRAFT_7,
-  DRAFT_2019_09;
+  DRAFT_4 {
+    @Override public String idKeyword() {
+      return "id";
+    }
+
+    @Override
+    List<String> metaSchemaUrls() {
+      return Arrays.asList(
+          "http://json-schema.org/draft-04/schema",
+          "https://json-schema.org/draft-04/schema"
+      );
+    }
+
+  }, DRAFT_6 {
+    @Override public String idKeyword() {
+      return "$id";
+    }
+
+    @Override List<String> metaSchemaUrls() {
+      return Arrays.asList(
+          "http://json-schema.org/draft-06/schema",
+          "https://json-schema.org/draft-06/schema"
+      );
+    }
+  }, DRAFT_7 {
+    @Override public String idKeyword() {
+      return DRAFT_6.idKeyword();
+    }
+
+    @Override List<String> metaSchemaUrls() {
+      return Arrays.asList(
+          "http://json-schema.org/draft-07/schema",
+          "https://json-schema.org/draft-07/schema"
+      );
+    }
+  };
 
   private static final Map<String, SpecificationVersion> lookup = new HashMap<>();
 
@@ -41,5 +78,27 @@ public enum SpecificationVersion {
   @Override
   public String toString() {
     return name().toLowerCase(Locale.ROOT);
+  }
+
+  static SpecificationVersion getByMetaSchemaUrl(String metaSchemaUrl) {
+    return lookupByMetaSchemaUrl(metaSchemaUrl)
+        .orElseThrow(() -> new IllegalArgumentException(
+            format("could not determine schema version: no meta-schema is known with URL [%s]", metaSchemaUrl)
+        ));
+  }
+
+  public static Optional<SpecificationVersion> lookupByMetaSchemaUrl(String metaSchemaUrl) {
+    return Arrays.stream(values())
+        .filter(v -> v.metaSchemaUrls().stream().anyMatch(metaSchemaUrl::startsWith))
+        .findFirst();
+  }
+
+
+  public abstract String idKeyword();
+
+  abstract List<String> metaSchemaUrls();
+
+  public boolean isAtLeast(SpecificationVersion lowerInclusiveBound) {
+    return this.ordinal() >= lowerInclusiveBound.ordinal();
   }
 }

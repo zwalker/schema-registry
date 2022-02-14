@@ -15,8 +15,6 @@
 
 package io.confluent.kafka.schemaregistry.json.diff;
 
-import org.everit.json.schema.Schema;
-
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,6 +22,7 @@ import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
+import net.jimblackler.jsonschemafriend.Schema;
 
 public class Context {
   private final Set<Difference.Type> compatibleChanges;

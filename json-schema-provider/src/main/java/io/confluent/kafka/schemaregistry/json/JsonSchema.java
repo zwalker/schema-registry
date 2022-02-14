@@ -25,11 +25,20 @@ import com.fasterxml.jackson.databind.node.BooleanNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+/*
 import org.everit.json.schema.Schema;
 import org.everit.json.schema.ValidationException;
 import org.everit.json.schema.loader.SchemaLoader;
 import org.everit.json.schema.loader.SpecificationVersion;
 import org.everit.json.schema.loader.internal.ReferenceResolver;
+
+ */
+import java.net.URISyntaxException;
+import javax.print.URIException;
+import net.jimblackler.jsonschemafriend.Schema;
+import net.jimblackler.jsonschemafriend.SchemaStore;
+import net.jimblackler.jsonschemafriend.ValidationException;
+import net.jimblackler.jsonschemafriend.Validator;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -194,24 +203,34 @@ public class JsonSchema implements ParsedSchema {
         if (jsonNode.has(spec.idKeyword())) {
           String id = jsonNode.get(spec.idKeyword()).asText();
           if (id != null) {
-            idUri = ReferenceResolver.resolve((URI) null, id);
+            idUri = resolve((URI) null, id);
           }
         }
-        SchemaLoader.SchemaLoaderBuilder builder = SchemaLoader.builder()
-            .useDefaults(true).draftV7Support();
+        SchemaStore schemaStore = new SchemaStore();
         for (Map.Entry<String, String> dep : resolvedReferences.entrySet()) {
-          URI child = ReferenceResolver.resolve(idUri, dep.getKey());
-          builder.registerSchemaByURI(child, new JSONObject(dep.getValue()));
+          URI child = resolve(idUri, dep.getKey());
+          schemaStore.store(child, dep.getValue());
         }
-        JSONObject jsonObject = objectMapper.treeToValue(jsonNode, JSONObject.class);
-        builder.schemaJson(jsonObject);
-        SchemaLoader loader = builder.build();
-        schemaObj = loader.load().build();
-      } catch (IOException e) {
+        Map<String, Object> jsonObject = objectMapper.treeToValue(jsonNode, Map.class);
+        schemaObj = schemaStore.loadSchema(jsonObject);
+      } catch (Exception e) {
         throw new IllegalArgumentException("Invalid JSON", e);
       }
     }
     return schemaObj;
+  }
+
+  static URI resolve(final URI parentScope, final String encounteredSegment)
+      throws URISyntaxException {
+    return new URI(resolve(parentScope == null ? null : parentScope.toString(),
+        encounteredSegment));
+  }
+
+  static String resolve(String parentScope, final String encounteredSegment)
+      throws URISyntaxException {
+    return parentScope != null
+        ? new URI(parentScope).resolve(encounteredSegment).toString()
+        : encounteredSegment;
   }
 
   @Override
@@ -296,20 +315,21 @@ public class JsonSchema implements ParsedSchema {
     } else if (value instanceof TextNode) {
       primitiveValue = ((TextNode) value).asText();
     }
+    Validator validator = new Validator();
     if (primitiveValue != NONE_MARKER) {
-      rawSchema().validate(primitiveValue);
+      validator.validate(rawSchema(), primitiveValue);
     } else {
       Object jsonObject;
       if (value instanceof ArrayNode) {
-        jsonObject = objectMapper.treeToValue(((ArrayNode) value), JSONArray.class);
+        jsonObject = objectMapper.treeToValue(((ArrayNode) value), Map.class);
       } else if (value instanceof JsonNode) {
-        jsonObject = objectMapper.treeToValue(((JsonNode) value), JSONObject.class);
+        jsonObject = objectMapper.treeToValue(((JsonNode) value), List.class);
       } else if (value.getClass().isArray()) {
-        jsonObject = objectMapper.convertValue(value, JSONArray.class);
+        jsonObject = objectMapper.convertValue(value, Map.class);
       } else {
-        jsonObject = objectMapper.convertValue(value, JSONObject.class);
+        jsonObject = objectMapper.convertValue(value, List.class);
       }
-      rawSchema().validate(jsonObject);
+      validator.validate(rawSchema(), jsonObject);
     }
   }
 

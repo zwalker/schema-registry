@@ -15,15 +15,11 @@
 
 package io.confluent.kafka.schemaregistry.json.diff;
 
-import org.everit.json.schema.ArraySchema;
-import org.everit.json.schema.EmptySchema;
-import org.everit.json.schema.FalseSchema;
-import org.everit.json.schema.Schema;
-
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import net.jimblackler.jsonschemafriend.Schema;
 
 import static io.confluent.kafka.schemaregistry.json.diff.Difference.Type.ADDITIONAL_ITEMS_ADDED;
 import static io.confluent.kafka.schemaregistry.json.diff.Difference.Type.ADDITIONAL_ITEMS_EXTENDED;
@@ -51,7 +47,7 @@ import static io.confluent.kafka.schemaregistry.json.diff.Difference.Type.UNIQUE
 import static io.confluent.kafka.schemaregistry.json.diff.Difference.Type.UNIQUE_ITEMS_REMOVED;
 
 public class ArraySchemaDiff {
-  static void compare(final Context ctx, final ArraySchema original, final ArraySchema update) {
+  static void compare(final Context ctx, final Schema original, final Schema update) {
     compareItemSchemaObject(ctx, original, update);
     compareItemSchemaArray(ctx, original, update);
     compareAdditionalItems(ctx, original, update);
@@ -59,16 +55,16 @@ public class ArraySchemaDiff {
   }
 
   private static void compareAttributes(
-      final Context ctx, final ArraySchema original, final ArraySchema update
+      final Context ctx, final Schema original, final Schema update
   ) {
     if (!Objects.equals(original.getMaxItems(), update.getMaxItems())) {
       if (original.getMaxItems() == null && update.getMaxItems() != null) {
         ctx.addDifference("maxItems", MAX_ITEMS_ADDED);
       } else if (original.getMaxItems() != null && update.getMaxItems() == null) {
         ctx.addDifference("maxItems", MAX_ITEMS_REMOVED);
-      } else if (original.getMaxItems() < update.getMaxItems()) {
+      } else if (original.getMaxItems().intValue() < update.getMaxItems().intValue()) {
         ctx.addDifference("maxItems", MAX_ITEMS_INCREASED);
-      } else if (original.getMaxItems() > update.getMaxItems()) {
+      } else if (original.getMaxItems().intValue() > update.getMaxItems().intValue()) {
         ctx.addDifference("maxItems", MAX_ITEMS_DECREASED);
       }
     }
@@ -77,14 +73,14 @@ public class ArraySchemaDiff {
         ctx.addDifference("minItems", MIN_ITEMS_ADDED);
       } else if (original.getMinItems() != null && update.getMinItems() == null) {
         ctx.addDifference("minItems", MIN_ITEMS_REMOVED);
-      } else if (original.getMinItems() < update.getMinItems()) {
+      } else if (original.getMinItems().intValue() < update.getMinItems().intValue()) {
         ctx.addDifference("minItems", MIN_ITEMS_INCREASED);
-      } else if (original.getMinItems() > update.getMinItems()) {
+      } else if (original.getMinItems().intValue() > update.getMinItems().intValue()) {
         ctx.addDifference("minItems", MIN_ITEMS_DECREASED);
       }
     }
-    if (original.needsUniqueItems() != update.needsUniqueItems()) {
-      if (original.needsUniqueItems()) {
+    if (original.isUniqueItems() != update.isUniqueItems()) {
+      if (original.isUniqueItems()) {
         ctx.addDifference("uniqueItems", UNIQUE_ITEMS_REMOVED);
       } else {
         ctx.addDifference("uniqueItems", UNIQUE_ITEMS_ADDED);
@@ -93,39 +89,31 @@ public class ArraySchemaDiff {
   }
 
   private static void compareAdditionalItems(
-      final Context ctx, final ArraySchema original, final ArraySchema update
+      final Context ctx, final Schema original, final Schema update
   ) {
     try (Context.PathScope pathScope = ctx.enterPath("additionalItems")) {
-      if (original.permitsAdditionalItems() != update.permitsAdditionalItems()) {
-        if (original.permitsAdditionalItems()) {
-          ctx.addDifference(ADDITIONAL_ITEMS_REMOVED);
-        } else {
-          ctx.addDifference(ADDITIONAL_ITEMS_ADDED);
-        }
-      } else if (original.getSchemaOfAdditionalItems() == null
-          && update.getSchemaOfAdditionalItems() != null) {
-        ctx.addDifference(ADDITIONAL_ITEMS_NARROWED);
-      } else if (update.getSchemaOfAdditionalItems() == null
-          && original.getSchemaOfAdditionalItems() != null) {
-        ctx.addDifference(ADDITIONAL_ITEMS_EXTENDED);
+      if (original.getAdditionalItems() != null && update.getAdditionalItems() == null) {
+        ctx.addDifference(ADDITIONAL_ITEMS_REMOVED);
+      } else if (original.getAdditionalItems() == null && update.getAdditionalItems() != null) {
+        ctx.addDifference(ADDITIONAL_ITEMS_ADDED);
       } else {
         SchemaDiff.compare(
             ctx,
-            original.getSchemaOfAdditionalItems(),
-            update.getSchemaOfAdditionalItems()
+            original.getAdditionalItems(),
+            update.getAdditionalItems()
         );
       }
     }
   }
 
   private static void compareItemSchemaArray(
-      final Context ctx, final ArraySchema original, final ArraySchema update
+      final Context ctx, final Schema original, final Schema update
   ) {
-    List<Schema> originalSchemas = original.getItemSchemas();
+    List<Schema> originalSchemas = original.getItemsTuple();
     if (originalSchemas == null) {
       originalSchemas = Collections.emptyList();
     }
-    List<Schema> updateSchemas = update.getItemSchemas();
+    List<Schema> updateSchemas = update.getItemsTuple();
     if (updateSchemas == null) {
       updateSchemas = Collections.emptyList();
     }
@@ -161,7 +149,7 @@ public class ArraySchemaDiff {
               ctx.addDifference(ITEM_REMOVED_NOT_COVERED_BY_PARTIALLY_OPEN_CONTENT_MODEL);
             }
           } else {
-            if (originalSchema instanceof FalseSchema) {
+            if (originalSchema.getSchemaObject() == Boolean.FALSE) {
               // compatible
               ctx.addDifference(ITEM_WITH_FALSE_REMOVED_FROM_CLOSED_CONTENT_MODEL);
             } else {
@@ -177,7 +165,7 @@ public class ArraySchemaDiff {
       try (Context.PathScope pathScope = ctx.enterPath("items/" + index)) {
         Schema updateSchema = updateIterator.next();
         if (isOpenContentModel(original)) {
-          if (updateSchema instanceof EmptySchema) {
+          if (updateSchema.getSchemaObject() == Boolean.TRUE) {
             // compatible
             ctx.addDifference(ITEM_WITH_EMPTY_SCHEMA_ADDED_TO_OPEN_CONTENT_MODEL);
           } else {
@@ -208,19 +196,18 @@ public class ArraySchemaDiff {
   }
 
   private static void compareItemSchemaObject(
-      final Context ctx, final ArraySchema original, final ArraySchema update
+      final Context ctx, final Schema original, final Schema update
   ) {
     try (Context.PathScope pathScope = ctx.enterPath("items")) {
-      SchemaDiff.compare(ctx, original.getAllItemSchema(), update.getAllItemSchema());
+      SchemaDiff.compare(ctx, original.getItems(), update.getItems());
     }
   }
 
-  private static boolean isOpenContentModel(final ArraySchema schema) {
-    return schema.getSchemaOfAdditionalItems() == null
-        && schema.permitsAdditionalItems();
+  private static boolean isOpenContentModel(final Schema schema) {
+    return schema.getAdditionalItems() == null;
   }
 
-  private static Schema schemaFromPartiallyOpenContentModel(final ArraySchema schema) {
-    return schema.getSchemaOfAdditionalItems();
+  private static Schema schemaFromPartiallyOpenContentModel(final Schema schema) {
+    return schema.getAdditionalItems();
   }
 }

@@ -15,6 +15,7 @@
 
 package io.confluent.kafka.schemaregistry.json.diff;
 
+/*
 import org.everit.json.schema.ArraySchema;
 import org.everit.json.schema.CombinedSchema;
 import org.everit.json.schema.EmptySchema;
@@ -27,6 +28,9 @@ import org.everit.json.schema.ReferenceSchema;
 import org.everit.json.schema.Schema;
 import org.everit.json.schema.StringSchema;
 
+ */
+
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -34,6 +38,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import io.confluent.kafka.schemaregistry.json.diff.Difference.Type;
+import net.jimblackler.jsonschemafriend.Schema;
 
 public class SchemaDiff {
   public static final Set<Difference.Type> COMPATIBLE_CHANGES;
@@ -129,19 +134,18 @@ public class SchemaDiff {
     original = normalizeSchema(original);
     update = normalizeSchema(update);
 
-    if (!(original instanceof CombinedSchema) && update instanceof CombinedSchema) {
-      CombinedSchema combinedSchema = (CombinedSchema) update;
+    if (!isCombinedSchema(original) && isCombinedSchema(update)) {
       // Special case of singleton unions
-      if (combinedSchema.getSubschemas().size() == 1) {
+      Collection<Schema> subschemas = getSubschemas(update);
+      if (subschemas.size() == 1) {
         final Context subctx = ctx.getSubcontext();
-        compare(subctx, original, combinedSchema.getSubschemas().iterator().next());
+        compare(subctx, original, subschemas.iterator().next());
         if (subctx.isCompatible()) {
           ctx.addDifferences(subctx.getDifferences());
           return;
         }
-      } else if (combinedSchema.getCriterion() == CombinedSchema.ANY_CRITERION
-          || combinedSchema.getCriterion() == CombinedSchema.ONE_CRITERION) {
-        for (Schema subschema : combinedSchema.getSubschemas()) {
+      } else if (update.getAnyOf() != null || update.getOneOf() != null) {
+        for (Schema subschema : subschemas) {
           final Context subctx = ctx.getSubcontext();
           compare(subctx, original, subschema);
           if (subctx.isCompatible()) {
@@ -151,12 +155,12 @@ public class SchemaDiff {
           }
         }
       }
-    } else if (original instanceof CombinedSchema && !(update instanceof CombinedSchema)) {
+    } else if (isCombinedSchema(original) && !isCombinedSchema(update)) {
       // Special case of singleton unions
-      CombinedSchema combinedSchema = (CombinedSchema) original;
-      if (combinedSchema.getSubschemas().size() == 1) {
+      Collection<Schema> subschemas = getSubschemas(original);
+      if (subschemas.size() == 1) {
         final Context subctx = ctx.getSubcontext();
-        compare(subctx, combinedSchema.getSubschemas().iterator().next(), update);
+        compare(subctx, subschemas.iterator().next(), update);
         if (subctx.isCompatible()) {
           ctx.addDifferences(subctx.getDifferences());
           return;
@@ -164,9 +168,9 @@ public class SchemaDiff {
       }
     }
 
-    if (!original.getClass().equals(update.getClass())) {
+    if (!original.getExplicitTypes().equals(update.getExplicitTypes())) {
       // TrueSchema extends EmptySchema
-      if (original instanceof FalseSchema || update instanceof EmptySchema) {
+      if (original.getSchemaObject() == Boolean.FALSE || update.getSchemaObject() == Boolean.TRUE) {
         return;
       } else {
         ctx.addDifference(Type.TYPE_CHANGED);
@@ -176,23 +180,29 @@ public class SchemaDiff {
 
     try (Context.SchemaScope schemaScope = ctx.enterSchema(original)) {
       if (schemaScope != null) {
-        if (!Objects.equals(original.getId(), update.getId())) {
+        // TODO remove
+        /*
+        if (!Objects.equals(original.(), update.getId())) {
           ctx.addDifference(Type.ID_CHANGED);
         }
+         */
         if (!Objects.equals(original.getTitle(), update.getTitle())) {
           ctx.addDifference(Type.TITLE_CHANGED);
         }
         if (!Objects.equals(original.getDescription(), update.getDescription())) {
           ctx.addDifference(Type.DESCRIPTION_CHANGED);
         }
-        if (!Objects.equals(original.getDefaultValue(), update.getDefaultValue())) {
+        if (!Objects.equals(original.getDefault(), update.getDefault())) {
           ctx.addDifference(Type.DEFAULT_CHANGED);
         }
 
-        if (original instanceof StringSchema) {
-          StringSchemaDiff.compare(ctx, (StringSchema) original, (StringSchema) update);
-        } else if (original instanceof NumberSchema) {
-          NumberSchemaDiff.compare(ctx, (NumberSchema) original, (NumberSchema) update);
+        Collection<String> types = original.getExplicitTypes();
+        if (types.contains("string") ) {
+          StringSchemaDiff.compare(ctx, original, update);
+        } else if (types.contains("number")) {
+          NumberSchemaDiff.compare(ctx, original, update);
+          // STOPPED HERE
+
         } else if (original instanceof EnumSchema) {
           EnumSchemaDiff.compare(ctx, (EnumSchema) original, (EnumSchema) update);
         } else if (original instanceof CombinedSchema) {
@@ -205,6 +215,20 @@ public class SchemaDiff {
           ArraySchemaDiff.compare(ctx, (ArraySchema) original, (ArraySchema) update);
         }
       }
+    }
+  }
+
+  private static boolean isCombinedSchema(final Schema schema) {
+    return !schema.getAllOf().isEmpty() || schema.getAnyOf() != null || schema.getOneOf() != null;
+  }
+
+  private static Collection<Schema> getSubschemas(final Schema schema) {
+    if (!schema.getAllOf().isEmpty()) {
+      return schema.getAllOf();
+    } else if (schema.getAnyOf() != null) {
+      return schema.getAnyOf();
+    } else if (schema.getOneOf() != null) {
+      return schema.getOneOf();
     }
   }
 
