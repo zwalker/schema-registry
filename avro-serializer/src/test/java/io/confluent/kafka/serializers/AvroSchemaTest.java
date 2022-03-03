@@ -21,8 +21,12 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.confluent.kafka.schemaregistry.ParsedSchema;
 import io.confluent.kafka.schemaregistry.avro.AvroSchemaProvider;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericArray;
 import org.apache.avro.generic.GenericData;
@@ -583,5 +587,67 @@ public class AvroSchemaTest {
     } catch (Exception e) {
       throw new RuntimeException("Failed to parse JSON", e);
     }
+  }
+
+  @Test
+  public void testLargeSchema() {
+    final AvroSchema original = new AvroSchema(readFile("client_schema_before.json"));
+    final AvroSchema newOne = new AvroSchema(readFile("client_schema.json"));
+    final AvroSchema small = new AvroSchema(recordSchema);
+    final AvroSchema originalCopy = new AvroSchema(original.canonicalString());
+    final AvroSchema newOneCopy = new AvroSchema(newOne.canonicalString());
+    final AvroSchema smallCopy = new AvroSchema(small.canonicalString());
+    boolean result;
+    int iters = 10;
+    long now = System.currentTimeMillis();
+    for (int i = 0; i < iters; i ++) {
+      result = small.equals(smallCopy);
+    }
+    System.out.println("*** sml " + (System.currentTimeMillis() - now));
+    now = System.currentTimeMillis();
+    for (int i = 0; i < iters; i ++) {
+      result = original.equals(originalCopy);
+    }
+    System.out.println("*** old " + (System.currentTimeMillis() - now));
+    now = System.currentTimeMillis();
+    for (int i = 0; i < iters; i ++) {
+      result = original.equals(newOneCopy);
+    }
+    System.out.println("*** mid " + (System.currentTimeMillis() - now));
+    now = System.currentTimeMillis();
+    for (int i = 0; i < iters; i ++) {
+      result = newOne.equals(newOneCopy);
+    }
+    System.out.println("*** new " + (System.currentTimeMillis() - now));
+    now = System.currentTimeMillis();
+    for (int i = 0; i < iters; i ++) {
+      result = small.rawSchema().equals(smallCopy.rawSchema());
+    }
+    System.out.println("*** raw sml " + (System.currentTimeMillis() - now));
+    now = System.currentTimeMillis();
+    for (int i = 0; i < iters; i ++) {
+      result = original.rawSchema().equals(originalCopy.rawSchema());
+    }
+    System.out.println("*** raw old " + (System.currentTimeMillis() - now));
+    now = System.currentTimeMillis();
+    for (int i = 0; i < iters; i ++) {
+      result = original.rawSchema().equals(newOneCopy.rawSchema());
+    }
+    System.out.println("*** raw mid " + (System.currentTimeMillis() - now));
+    now = System.currentTimeMillis();
+    for (int i = 0; i < iters; i ++) {
+      result = newOne.rawSchema().equals(newOneCopy.rawSchema());
+    }
+    System.out.println("*** raw new " + (System.currentTimeMillis() - now));
+  }
+
+  public static String readFile(String fileName) {
+    ClassLoader classLoader = ClassLoader.getSystemClassLoader();
+    InputStream is = classLoader.getResourceAsStream(fileName);
+    if (is != null) {
+      BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+      return reader.lines().collect(Collectors.joining(System.lineSeparator()));
+    }
+    return null;
   }
 }
