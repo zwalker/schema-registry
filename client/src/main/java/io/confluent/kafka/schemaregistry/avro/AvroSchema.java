@@ -19,13 +19,24 @@ package io.confluent.kafka.schemaregistry.avro;
 import static io.confluent.kafka.schemaregistry.client.rest.entities.Metadata.EMPTY_METADATA;
 import static io.confluent.kafka.schemaregistry.client.rest.entities.RuleSet.EMPTY_RULESET;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import io.confluent.kafka.schemaregistry.rules.FieldTransform;
+import io.confluent.kafka.schemaregistry.rules.RuleContext;
+import io.confluent.kafka.schemaregistry.rules.RuleException;
 import io.confluent.kafka.schemaregistry.client.rest.entities.Metadata;
 import io.confluent.kafka.schemaregistry.ParsedSchema;
 import io.confluent.kafka.schemaregistry.client.rest.entities.RuleSet;
 import io.confluent.kafka.schemaregistry.client.rest.entities.SchemaReference;
 
+import io.confluent.kafka.schemaregistry.utils.JacksonMapper;
+import io.confluent.kafka.schemaregistry.utils.WildcardMatcher;
+import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.Set;
+import java.util.SortedSet;
 import java.util.stream.Collectors;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaCompatibility;
@@ -37,6 +48,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericRecord;
+import org.apache.avro.reflect.ReflectData;
+import org.apache.avro.specific.SpecificData;
+import org.apache.avro.specific.SpecificRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,6 +61,8 @@ public class AvroSchema implements ParsedSchema {
   private static final Logger log = LoggerFactory.getLogger(AvroSchema.class);
 
   public static final String TYPE = "AVRO";
+
+  public static final String ANNOTATIONS = "confluent.annotations";
 
   private final Schema schemaObj;
   private String canonicalString;
@@ -430,6 +448,100 @@ public class AvroSchema implements ParsedSchema {
   @Override
   public String toString() {
     return canonicalString();
+  }
+
+  @Override
+  public Object fromJson(JsonNode json) throws IOException {
+    return AvroSchemaUtils.toObject(json, this);
+  }
+
+  @Override
+  public JsonNode toJson(Object message) throws IOException {
+    return JacksonMapper.INSTANCE.readTree(AvroSchemaUtils.toJson(message));
+  }
+
+  @Override
+  public Object transformMessage(RuleContext ctx, FieldTransform transform, Object message)
+      throws RuleException {
+    return toTransformedMessage(ctx, this.rawSchema(), message, transform);
+  }
+
+  private Object toTransformedMessage(
+      RuleContext ctx, Schema schema, Object message, FieldTransform transform)
+      throws RuleException {
+    if (schema == null) {
+      return message;
+    }
+    GenericData data;
+    Schema.Type st = schema.getType();
+    switch (st) {
+      case UNION:
+        data = getData(message);
+        int unionIndex = data.resolveUnion(schema, message);
+        return toTransformedMessage(ctx, schema.getTypes().get(unionIndex), message, transform);
+      case ARRAY:
+        for (Iterator<? extends Object> it = ((Iterable<?>) message).iterator(); it.hasNext();) {
+          toTransformedMessage(ctx, schema.getElementType(), it.next(), transform);
+        }
+        return message;
+      case MAP:
+        for (Iterator<? extends Object> it = ((Map<?, ?>) message).values().iterator();
+            it.hasNext();) {
+          toTransformedMessage(ctx, schema.getValueType(), it.next(), transform);
+        }
+        return message;
+      case RECORD:
+        data = getData(message);
+        for (Schema.Field f : schema.getFields()) {
+          Object value = data.getField(message, f.name(), f.pos());
+          Object newValue;
+          switch (f.schema().getType()) {
+            case UNION:
+            case ARRAY:
+            case MAP:
+            case RECORD:
+              newValue = toTransformedMessage(ctx, f.schema(), value, transform);
+              break;
+            default:
+              String fullName = schema.getFullName() + "." + f.name();
+              newValue = transform.transform(
+                  ctx, message, getAnnotations(ctx, f, fullName),
+                  fullName, f.name(), value);
+              break;
+          }
+          data.setField(message, f.name(), f.pos(), newValue);
+        }
+        return message;
+      default:
+        return message;
+    }
+  }
+
+  private Set<String> getAnnotations(RuleContext ctx, Schema.Field field, String fullName) {
+    Set<String> annotations = new HashSet<>();
+    Object prop = field.getObjectProp(ANNOTATIONS);
+    if (prop instanceof List) {
+      ((List<?>)prop).forEach(p -> annotations.add(p.toString()));
+    }
+    Metadata metadata = ctx.schema().metadata();
+    if (metadata != null && metadata.getAnnotations() != null) {
+      for (Map.Entry<String, SortedSet<String>> entry : metadata.getAnnotations().entrySet()) {
+        if (WildcardMatcher.match(fullName, entry.getKey())) {
+          annotations.addAll(entry.getValue());
+        }
+      }
+    }
+    return annotations;
+  }
+
+  private static GenericData getData(Object message) {
+    if (message instanceof SpecificRecord) {
+      return SpecificData.get();
+    } else if (message instanceof GenericRecord) {
+      return GenericData.get();
+    } else {
+      return  ReflectData.get();
+    }
   }
 
   static class IdentityPair<K, V> {

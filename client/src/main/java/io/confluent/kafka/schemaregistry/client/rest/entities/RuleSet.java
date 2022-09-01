@@ -50,6 +50,22 @@ public class RuleSet {
     return domainRules;
   }
 
+  public boolean hasRules(RuleMode mode) {
+    switch (mode) {
+      case UPGRADE:
+      case DOWNGRADE:
+        return getMigrationRules().stream().anyMatch(r -> r.getMode() == mode);
+      case READWRITE:
+        return getDomainRules().stream().anyMatch(r -> r.getMode() == mode);
+      case READ:
+      case WRITE:
+        return getDomainRules().stream().anyMatch(r -> r.getMode() == mode
+            || r.getMode() == RuleMode.READWRITE);
+      default:
+        return false;
+    }
+  }
+
   public boolean equals(Object o) {
     if (this == o) {
       return true;

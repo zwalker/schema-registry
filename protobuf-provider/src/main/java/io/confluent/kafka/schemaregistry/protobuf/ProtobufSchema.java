@@ -16,6 +16,7 @@
 
 package io.confluent.kafka.schemaregistry.protobuf;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.EnumHashBiMap;
 import com.google.common.collect.ImmutableList;
 import com.google.protobuf.AnyProto;
@@ -87,13 +88,19 @@ import com.squareup.wire.schema.internal.parser.ReservedElement;
 import com.squareup.wire.schema.internal.parser.RpcElement;
 import com.squareup.wire.schema.internal.parser.ServiceElement;
 import com.squareup.wire.schema.internal.parser.TypeElement;
+import io.confluent.kafka.schemaregistry.rules.FieldTransform;
+import io.confluent.kafka.schemaregistry.rules.RuleContext;
+import io.confluent.kafka.schemaregistry.rules.RuleException;
 import io.confluent.kafka.schemaregistry.client.rest.entities.Metadata;
 import io.confluent.kafka.schemaregistry.client.rest.entities.RuleSet;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaUtils.FormatContext;
 import io.confluent.kafka.schemaregistry.protobuf.dynamic.ServiceDefinition;
+import io.confluent.kafka.schemaregistry.utils.JacksonMapper;
+import io.confluent.kafka.schemaregistry.utils.WildcardMatcher;
 import io.confluent.protobuf.MetaProto;
 import io.confluent.protobuf.MetaProto.Meta;
 import io.confluent.protobuf.type.DecimalProto;
+import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.stream.Stream;
 import kotlin.Pair;
@@ -111,6 +118,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.stream.Collectors;
 
 import io.confluent.kafka.schemaregistry.ParsedSchema;
@@ -2003,6 +2011,65 @@ public class ProtobufSchema implements ParsedSchema {
       parts[parts.length - 1] = lastPart;
     }
     return String.join(".", parts);
+  }
+
+  @Override
+  public Object fromJson(JsonNode json) throws IOException {
+    return ProtobufSchemaUtils.toObject(json, this);
+  }
+
+  @Override
+  public JsonNode toJson(Object message) throws IOException {
+    return JacksonMapper.INSTANCE.readTree(ProtobufSchemaUtils.toJson((Message) message));
+  }
+
+  @Override
+  public Object transformMessage(RuleContext ctx, FieldTransform transform, Object message)
+      throws RuleException {
+    Message msg = (Message)message;
+    Descriptor desc = toDescriptor(msg.getDescriptorForType().getFullName());
+    return toTransformedMessage(ctx, desc, msg, transform);
+  }
+
+  private Message toTransformedMessage(
+      RuleContext ctx, Descriptor desc, Message message, FieldTransform transform)
+      throws RuleException {
+    Message.Builder copy;
+    if (message instanceof Message.Builder) {
+      copy = (Message.Builder)message;
+    } else {
+      copy = message.toBuilder();
+    }
+    for (FieldDescriptor fd : desc.getFields()) {
+      Object value = message.getField(fd);
+      Object newValue;
+      if (value instanceof Message) {
+        newValue = toTransformedMessage(ctx, fd.getMessageType(), (Message)value, transform);
+      } else {
+        newValue = transform.transform(
+            ctx, message, getAnnotations(ctx, fd, fd.getFullName()),
+            fd.getFullName(), fd.getName(), value);
+      }
+      copy.setField(fd, newValue);
+    }
+    return copy.build();
+  }
+
+  private Set<String> getAnnotations(RuleContext ctx, FieldDescriptor fd, String fullName) {
+    Set<String> annotations = new HashSet<>();
+    if (fd.getOptions().hasExtension(MetaProto.fieldMeta)) {
+      Meta meta = fd.getOptions().getExtension(MetaProto.fieldMeta);
+      annotations.addAll(meta.getAnnotationList());
+    }
+    Metadata metadata = ctx.schema().metadata();
+    if (metadata != null && metadata.getAnnotations() != null) {
+      for (Map.Entry<String, SortedSet<String>> entry : metadata.getAnnotations().entrySet()) {
+        if (WildcardMatcher.match(fullName, entry.getKey())) {
+          annotations.addAll(entry.getValue());
+        }
+      }
+    }
+    return annotations;
   }
 
   public enum Format {
