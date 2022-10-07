@@ -45,7 +45,7 @@ public class RuleContext {
   private final boolean isKey;
   private final RuleMode ruleMode;
   private final Rule rule;
-  private final Map<String, Object> customData = new ConcurrentHashMap<>();
+  private final Map<Object, Object> customData = new ConcurrentHashMap<>();
   private final Deque<FieldContext> fieldContexts;
 
   public RuleContext(
@@ -118,7 +118,7 @@ public class RuleContext {
     return rule;
   }
 
-  public Map<String, Object> customData() {
+  public Map<Object, Object> customData() {
     return customData;
   }
 
