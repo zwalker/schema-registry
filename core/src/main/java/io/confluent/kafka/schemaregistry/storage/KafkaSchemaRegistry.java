@@ -56,6 +56,7 @@ import io.confluent.kafka.schemaregistry.metrics.MetricsContainer;
 import io.confluent.kafka.schemaregistry.protobuf.ProtobufSchemaProvider;
 import io.confluent.kafka.schemaregistry.rest.SchemaRegistryConfig;
 import io.confluent.kafka.schemaregistry.rest.VersionId;
+import io.confluent.kafka.schemaregistry.storage.encoder.MetadataEncoderService;
 import io.confluent.kafka.schemaregistry.storage.exceptions.EntryTooLargeException;
 import io.confluent.kafka.schemaregistry.storage.exceptions.StoreException;
 import io.confluent.kafka.schemaregistry.storage.exceptions.StoreInitializationException;
@@ -119,6 +120,7 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
   private final LookupCache<SchemaRegistryKey, SchemaRegistryValue> lookupCache;
   // visible for testing
   final KafkaStore<SchemaRegistryKey, SchemaRegistryValue> kafkaStore;
+  private final MetadataEncoderService metadataEncoder;
   private final Serializer<SchemaRegistryKey, SchemaRegistryValue> serializer;
   private final SchemaRegistryIdentity myIdentity;
   private final CompatibilityLevel defaultCompatibilityLevel;
@@ -192,6 +194,7 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
     this.lookupCache = lookupCache();
     this.idGenerator = identityGenerator(config);
     this.kafkaStore = kafkaStore(config);
+    this.metadataEncoder = new MetadataEncoderService(this);
   }
 
   private Map<String, SchemaProvider> initProviders(SchemaRegistryConfig config) {
@@ -268,6 +271,10 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
     return serializer;
   }
 
+  public MetadataEncoderService getMetadataEncoder() {
+    return metadataEncoder;
+  }
+
   protected IdGenerator identityGenerator(SchemaRegistryConfig config) {
     config.checkBootstrapServers();
     IdGenerator idGenerator = new IncrementalIdGenerator(this);
@@ -323,6 +330,13 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
     } catch (StoreInitializationException e) {
       throw new SchemaRegistryInitializationException(
           "Error initializing kafka store while initializing schema registry", e);
+    }
+
+    try {
+      metadataEncoder.init();
+    } catch (Exception e) {
+      throw new SchemaRegistryInitializationException(
+          "Error initializing metadata encoder while initializing schema registry", e);
     }
 
     try {
@@ -558,21 +572,25 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
         }
 
         SchemaKey schemaKey = new SchemaKey(subject, schema.getVersion());
+        SchemaValue schemaValue = new SchemaValue(schema);
+        metadataEncoder.encodeMetadata(schemaValue);
         if (schemaId >= 0) {
           checkIfSchemaWithIdExist(schemaId, schema);
           schema.setId(schemaId);
-          kafkaStore.put(schemaKey, new SchemaValue(schema));
+          schemaValue.setId(schemaId);
+          kafkaStore.put(schemaKey, schemaValue);
         } else {
           int retries = 0;
           while (retries++ < kafkaStoreMaxRetries) {
-            int newId = idGenerator.id(new SchemaValue(schema));
+            int newId = idGenerator.id(schemaValue);
             // Verify id is not already in use
             if (lookupCache.schemaKeyById(newId, subject) == null) {
               schema.setId(newId);
+              schemaValue.setId(newId);
               if (retries > 1) {
                 log.warn(String.format("Retrying to register the schema with ID %s", newId));
               }
-              kafkaStore.put(schemaKey, new SchemaValue(schema));
+              kafkaStore.put(schemaKey, schemaValue);
               break;
             }
           }
@@ -720,6 +738,7 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
       if (!permanentDelete) {
         schemaValue = new SchemaValue(schema);
         schemaValue.setDeleted(true);
+        metadataEncoder.encodeMetadata(schemaValue);
         kafkaStore.put(key, schemaValue);
         if (!getAllVersions(subject, LookupFilter.DEFAULT).hasNext()) {
           if (getMode(subject) != null) {
@@ -730,7 +749,6 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
           }
         }
       } else {
-
         kafkaStore.put(key, null);
       }
     } catch (StoreTimeoutException te) {
@@ -1212,6 +1230,7 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
       SchemaKey key = new SchemaKey(subject, version);
       try {
         SchemaValue schemaValue = (SchemaValue) kafkaStore.get(key);
+        metadataEncoder.decodeMetadata(schemaValue);
         Schema schema = null;
         if ((schemaValue != null && !schemaValue.isDeleted()) || returnDeletedSchema) {
           schema = getSchemaEntityFromSchemaValue(schemaValue);
@@ -1526,7 +1545,12 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
       }
       SchemaKey key1 = new SchemaKey(start, MIN_VERSION);
       SchemaKey key2 = new SchemaKey(end, MAX_VERSION);
-      return kafkaStore.getAll(key1, key2);
+      return TransformedIterator.transform(kafkaStore.getAll(key1, key2), v -> {
+        if (v instanceof SchemaValue) {
+          metadataEncoder.decodeMetadata(((SchemaValue) v));
+        }
+        return v;
+      });
     } catch (StoreException e) {
       throw new SchemaRegistryStoreException(
           "Error from the backend Kafka store", e);
@@ -1559,6 +1583,7 @@ public class KafkaSchemaRegistry implements SchemaRegistry, LeaderAwareSchemaReg
   public void close() {
     log.info("Shutting down schema registry");
     kafkaStore.close();
+    metadataEncoder.close();
     if (leaderElector != null) {
       leaderElector.close();
     }
