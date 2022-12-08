@@ -111,7 +111,7 @@ public class HcVaultFieldEncryptionExecutorTest extends FieldEncryptionExecutorT
     String userSchema = "{\"namespace\": \"example.avro\", \"type\": \"record\", "
         + "\"name\": \"User\","
         + "\"fields\": [{\"name\": \"name\", \"type\": \"string\", "
-        + "\"confluent.annotations\": [\"PII\"]}]}";
+        + "\"confluent.tags\": [\"PII\"]}]}";
     Schema.Parser parser = new Schema.Parser();
     Schema schema = parser.parse(userSchema);
     return schema;
