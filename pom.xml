@@ -152,15 +152,14 @@
                 <version>${protobuf.version}</version>
             </dependency>
             <dependency>
-<<<<<<< HEAD
-            <groupId>org.yaml</groupId>
+                <groupId>org.yaml</groupId>
                 <artifactId>snakeyaml</artifactId>
                 <version>${snakeyaml.version}</version>
-=======
+            </dependency>
+            <dependency>
                 <groupId>com.google.crypto.tink</groupId>
                 <artifactId>tink</artifactId>
                 <version>${tink.version}</version>
->>>>>>> 021b589352 (DGS-5335 Encrypt sensitive metadata properties at rest)
             </dependency>
             <dependency>
                 <groupId>com.google.api.grpc</groupId>
